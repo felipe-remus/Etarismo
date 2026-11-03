@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="theme-color" content="#4b2e83">
+  <title>Jogo da Memória – Etarismo no Trabalho</title>
+  <style>
+    :root {
+      /* Neutros */
+      --bg: #f6f4f1;
+      --surface: #ffffff;
+      --text: #2b2630;
+      --muted: #6b6573;
+      --line: #e4dfd8;
+
+      /* Roxo */
+      --primary: #4b2e83;
+      --primary-dark: #3b2467;
+      --purple-soft: #ece6f7;
+      --purple-border: #b9a5de;
+
+      /* Dourado */
+      --gold: #c9a227;
+      --gold-light: #e8c766;
+      --gold-soft: #faf1d6;
+      --gold-border: #e0c46c;
+      --gold-text: #7a5a00;
+
+      /* Cartas */
+      --back-1: #3b2467;
+      --back-2: #6a42a8;
+      --q-bg: var(--purple-soft);      /* Pergunta / Mito */
+      --q-border: var(--purple-border);
+      --q-label: var(--primary);
+      --a-bg: var(--gold-soft);        /* Resposta / Fato */
+      --a-border: var(--gold-border);
+      --a-label: var(--gold-text);
+
+      --ok: #1f9d55;
+      --card-ratio: 1 / 1.7;           /* proporção da carta (vertical) */
+      --card-font: clamp(.5rem, 2.5vw, .62rem); /* tamanho do texto dentro da carta */
+    }
+
+    * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+    html { -webkit-text-size-adjust: 100%; }
+
+    body {
+      margin: 0;
+      font-family: "Segoe UI", system-ui, -apple-system, Roboto, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.4;
+      padding-bottom: env(safe-area-inset-bottom);
+    }
+
+    /* ---------- Cabeçalho ---------- */
+    header {
+      background: var(--primary);
+      color: #fff;
+      padding: calc(12px + env(safe-area-inset-top)) 14px 12px;
+      text-align: center;
+      border-bottom: 4px solid var(--gold);
+    }
+    header h1 { margin: 0 0 3px; font-size: 1.15rem; line-height: 1.25; }
+    header p { margin: 0; color: #e7dff5; font-size: .85rem; }
+
+    main { max-width: 640px; margin: 0 auto; padding: 0 8px 24px; }
+
+    /* ---------- Barra fixa (placar + reiniciar) ---------- */
+    .toolbar {
+      position: sticky; top: 0; z-index: 5;
+      background: var(--bg);
+      margin: 0 -8px 10px;
+      padding: 8px 10px 6px;
+      border-bottom: 1px solid var(--line);
+      display: grid;
+      grid-template-columns: 1fr auto;
+      gap: 4px 12px;
+      align-items: center;
+    }
+    .stats { display: flex; gap: 14px; font-weight: 700; font-size: 1rem; color: var(--primary); }
+    .stats span { color: var(--muted); font-weight: 500; font-size: .8rem; }
+
+    .legend { grid-column: 1 / -1; display: flex; gap: 14px; font-size: .78rem; color: var(--muted); }
+    .legend i {
+      display: inline-block; width: 12px; height: 12px; border-radius: 4px;
+      vertical-align: -2px; margin-right: 5px; border: 2px solid;
+    }
+    .legend .lq { background: var(--q-bg); border-color: var(--q-border); }
+    .legend .la { background: var(--a-bg); border-color: var(--a-border); }
+
+    button.btn {
+      font: inherit; font-weight: 600;
+      background: var(--primary); color: #fff;
+      border: 2px solid var(--gold);
+      border-radius: 12px;
+      min-height: 44px; padding: 10px 18px; cursor: pointer;
+      touch-action: manipulation;
+      transition: background .2s, transform .1s;
+    }
+    button.btn:active { transform: scale(.96); background: var(--primary-dark); }
+    button.btn:focus-visible, .card:focus-visible { outline: 3px solid var(--gold); outline-offset: 2px; }
+    .toolbar .btn { padding: 6px 14px; min-height: 38px; font-size: .88rem; }
+
+    /* ---------- Tabuleiro (4 colunas) ---------- */
+    .board {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 5px;
+    }
+
+    .card {
+      all: unset;
+      display: block;
+      position: relative;
+      aspect-ratio: var(--card-ratio);
+      cursor: pointer;
+      perspective: 800px;
+      touch-action: manipulation;
+    }
+
+    .card-inner {
+      position: absolute; inset: 0;
+      transform-style: preserve-3d;
+      transition: transform .6s cubic-bezier(.4, .2, .2, 1);
+    }
+    .card.flipped .card-inner { transform: rotateY(180deg); }
+
+    .face {
+      position: absolute; inset: 0;
+      backface-visibility: hidden;
+      -webkit-backface-visibility: hidden;
+      border-radius: 8px;
+      padding: 4px 3px;
+      display: flex; flex-direction: column;
+      box-shadow: 0 2px 5px rgba(43, 38, 48, .18);
+      border: 2px solid transparent;
+    }
+
+    /* Costas (iguais para todas) */
+    .face.back {
+      align-items: center; justify-content: center;
+      background:
+        repeating-linear-gradient(45deg, rgba(232, 199, 102, .16) 0 6px, transparent 6px 12px),
+        linear-gradient(135deg, var(--back-1), var(--back-2));
+      border-color: var(--gold);
+      color: var(--gold-light);
+      font-size: 1.8rem; font-weight: 700;
+    }
+
+    /* Frente (texto dentro da carta) */
+    .face.front {
+      transform: rotateY(180deg);
+      justify-content: flex-start;
+      overflow-y: auto; -webkit-overflow-scrolling: touch;
+      scrollbar-width: none;
+    }
+    .face.front::-webkit-scrollbar { display: none; }
+
+    .face.front .tag {
+      font-size: calc(var(--card-font) * .85); font-weight: 700; letter-spacing: .03em;
+      text-transform: uppercase; line-height: 1.2;
+      text-align: center;
+      padding-bottom: 3px; margin-bottom: 3px;
+      border-bottom: 1px solid currentColor;
+    }
+    .face.front .txt {
+      font-size: var(--card-font); line-height: 1.25;
+      text-align: left;
+      hyphens: auto; -webkit-hyphens: auto;
+      overflow-wrap: anywhere;
+    }
+
+    .card.tipo-pergunta .face.front { background: var(--q-bg); border-color: var(--q-border); }
+    .card.tipo-pergunta .tag { color: var(--q-label); }
+    .card.tipo-pergunta .txt { font-weight: 600; }
+    .card.tipo-resposta .face.front { background: var(--a-bg); border-color: var(--a-border); }
+    .card.tipo-resposta .tag { color: var(--a-label); }
+
+    /* Par encontrado */
+    .card.matched { cursor: default; }
+    .card.matched .face.front {
+      border-color: var(--ok);
+      box-shadow: 0 0 0 2px rgba(31, 157, 85, .3), 0 2px 5px rgba(43, 38, 48, .15);
+    }
+    .card.matched .tag::after { content: " ✓"; color: var(--ok); }
+    .card.matched .card-inner { animation: pop .45s ease .55s; }
+
+    @keyframes pop {
+      0%, 100% { scale: 1; }
+      50% { scale: 1.05; }
+    }
+
+    /* Erro */
+    .card.wrong .face.front { border-color: #d64545; animation: shake .4s ease .6s; }
+    @keyframes shake {
+      0%, 100% { translate: 0; }
+      25% { translate: -3px; }
+      75% { translate: 3px; }
+    }
+
+    /* ---------- Modal ---------- */
+    .overlay {
+      position: fixed; inset: 0;
+      background: rgba(30, 20, 50, .65);
+      display: none; align-items: flex-end; justify-content: center;
+      padding: 12px 12px calc(12px + env(safe-area-inset-bottom)); z-index: 10;
+    }
+    .overlay.show { display: flex; }
+    .modal {
+      background: var(--surface); border-radius: 22px;
+      border-top: 5px solid var(--gold);
+      max-width: 520px; width: 100%;
+      max-height: 90vh; max-height: 90dvh; overflow-y: auto;
+      padding: 22px 20px 20px; text-align: center;
+      box-shadow: 0 20px 50px rgba(0,0,0,.4);
+      animation: rise .4s ease;
+    }
+    .modal .emoji { font-size: 2.6rem; }
+    .modal h2 { margin: 6px 0 6px; color: var(--primary); font-size: 1.4rem; }
+    .modal .resumo { color: var(--muted); margin: 0 0 14px; }
+    .modal .reflexao {
+      background: var(--gold-soft); border-left: 4px solid var(--gold);
+      text-align: left; border-radius: 8px;
+      padding: 12px 14px; margin-bottom: 18px; font-size: 1rem;
+    }
+    .modal .btn { width: 100%; min-height: 50px; font-size: 1.05rem; }
+    @keyframes rise { from { opacity: 0; transform: translateY(24px); } to { opacity: 1; transform: none; } }
+
+    @media (min-width: 700px) {
+      .overlay { align-items: center; }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      .card-inner { transition-duration: .01s; }
+      .card.matched .card-inner, .card.wrong .face.front, .modal { animation: none; }
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <h1>Jogo da Memória: Etarismo no Trabalho</h1>
+    <p>Encontre o par: cada <strong>pergunta/mito</strong> tem uma <strong>resposta/fato</strong>.</p>
+  </header>
+
+  <main>
+    <div class="toolbar">
+      <div class="stats" aria-live="polite">
+        <div><span>Tentativas</span> <strong id="moves">0</strong></div>
+        <div><span>Pares</span> <strong id="pairs">0</strong>/<strong id="total">0</strong></div>
+      </div>
+      <button class="btn" id="restart" type="button">Reiniciar</button>
+      <div class="legend" aria-hidden="true">
+        <div><i class="lq"></i>Pergunta / Mito</div>
+        <div><i class="la"></i>Resposta / Fato</div>
+      </div>
+    </div>
+
+    <section class="board" id="board" aria-label="Tabuleiro do jogo da memória"></section>
+  </main>
+
+  <div class="overlay" id="overlay" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+    <div class="modal">
+      <div class="emoji" aria-hidden="true">🎉</div>
+      <h2 id="modal-title">Parabéns!</h2>
+      <p class="resumo" id="resumo"></p>
+      <div class="reflexao" id="reflexao"></div>
+      <button class="btn" id="play-again" type="button">Jogar novamente</button>
+    </div>
+  </div>
+
+<script>
+/* =====================================================================
+   CONTEÚDO DO JOGO — EDITE AQUI
+   Cada item é um par: "pergunta" (ou mito) + "resposta" (ou fato).
+   Para adicionar um par, copie um bloco { ... }, e cole dentro do array.
+   O jogo se ajusta sozinho ao número de pares.
+   Dica: com 4 cartas por linha, textos curtos ficam mais legíveis.
+   ===================================================================== */
+const PARES = [
+  {
+    pergunta: "MITO: Profissionais mais velhos não conseguem aprender novas tecnologias.",
+    resposta: "A capacidade de aprender continua ao longo de toda a vida. Em geral, o que falta não é habilidade, e sim oportunidade de treinamento e apoio."
+  },
+  {
+    pergunta: "Profissionais mais velhos resistem a mudanças?",
+    resposta: "A resistência depende mais do contexto e de como a mudança é conduzida do que da idade. Pessoas de qualquer geração aderem melhor quando entendem o propósito."
+  },
+  {
+    pergunta: "A inovação vem apenas dos profissionais mais jovens?",
+    resposta: "Inovar exige combinar olhares. Os mais jovens trazem novas perspectivas e os mais experientes trazem repertório. Equipes intergeracionais costumam encontrar soluções mais completas."
+  },
+  {
+    pergunta: "\"Esse candidato é experiente demais para a vaga.\" O que há de problemático nessa frase?",
+    resposta: "Ela pode mascarar o etarismo: descarta a pessoa por idade ou tempo de carreira em vez de avaliar suas competências e seu interesse real pela função."
+  },
+  {
+    pergunta: "É legal restringir uma vaga por faixa etária?",
+    resposta: "No Brasil, a Lei 9.029/95 proíbe práticas discriminatórias na admissão, e a idade está entre os critérios protegidos. Anúncios como \"procura-se jovem\" são discriminatórios."
+  },
+  {
+    pergunta: "O que uma empresa pode fazer na prática para combater o etarismo?",
+    resposta: "Avaliar competências e não idade, oferecer treinamento para todas as faixas etárias, criar mentoria entre gerações e revisar vagas e processos seletivos em busca de vieses."
+  }
+];
+
+const REFLEXAO_FINAL =
+  "Equipes diversas em idade reúnem experiência, curiosidade e novos pontos de vista. " +
+  "Quando cada geração é valorizada pelo que sabe e pelo que pode aprender, " +
+  "toda a empresa ganha em inovação, respeito e resultados.";
+
+const TEMPO_DESVIRAR_MS = 1500; // tempo até desvirar cartas erradas
+
+/* =====================================================================
+   LÓGICA DO JOGO
+   ===================================================================== */
+const boardEl    = document.getElementById("board");
+const movesEl    = document.getElementById("moves");
+const pairsEl    = document.getElementById("pairs");
+const totalEl    = document.getElementById("total");
+const overlayEl  = document.getElementById("overlay");
+const resumoEl   = document.getElementById("resumo");
+const reflexaoEl = document.getElementById("reflexao");
+
+let primeira = null;
+let segunda = null;
+let travado = false;
+let tentativas = 0;
+let encontrados = 0;
+let ultimaOrdem = "";
+let timerDesvirar = null;
+
+function embaralhar(lista) {
+  const a = [...lista];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
+
+function montarBaralho() {
+  const cartas = [];
+  PARES.forEach((par, id) => {
+    cartas.push({ id, tipo: "pergunta", texto: par.pergunta });
+    cartas.push({ id, tipo: "resposta", texto: par.resposta });
+  });
+  // Embaralha de novo se a ordem ficar igual à do jogador anterior
+  let novas = embaralhar(cartas);
+  let chave = novas.map(c => c.id + c.tipo).join("|");
+  while (chave === ultimaOrdem && cartas.length > 2) {
+    novas = embaralhar(cartas);
+    chave = novas.map(c => c.id + c.tipo).join("|");
+  }
+  ultimaOrdem = chave;
+  return novas;
+}
+
+function criarCarta(dados, indice) {
+  const el = document.createElement("button");
+  el.type = "button";
+  el.className = `card tipo-${dados.tipo}`;
+  el.dataset.id = dados.id;
+  el.dataset.tipo = dados.tipo;
+  el.setAttribute("aria-label", `Carta ${indice + 1}, virada para baixo`);
+
+  const rotulo = dados.tipo === "pergunta" ? "Pergunta" : "Resposta";
+
+  el.innerHTML = `
+    <div class="card-inner">
+      <div class="face back" aria-hidden="true">?</div>
+      <div class="face front">
+        <div class="tag">${rotulo}</div>
+        <div class="txt"></div>
+      </div>
+    </div>`;
+  // textContent evita problemas com caracteres especiais nos textos
+  el.querySelector(".txt").textContent = dados.texto;
+
+  el.addEventListener("click", () => virar(el, indice));
+  return el;
+}
+
+function virar(el, indice) {
+  if (travado) return;
+  if (el.classList.contains("flipped")) return; // já virada ou travada
+
+  el.classList.add("flipped");
+  el.setAttribute("aria-label", `Carta ${indice + 1}: ${el.querySelector(".tag").textContent}. ${el.querySelector(".txt").textContent}`);
+
+  if (!primeira) {
+    primeira = el;
+    return;
+  }
+
+  segunda = el;
+  tentativas++;
+  movesEl.textContent = tentativas;
+  verificarPar();
+}
+
+function verificarPar() {
+  const formamPar =
+    primeira.dataset.id === segunda.dataset.id &&
+    primeira.dataset.tipo !== segunda.dataset.tipo;
+
+  if (formamPar) {
+    [primeira, segunda].forEach(c => c.classList.add("matched"));
+    encontrados++;
+    pairsEl.textContent = encontrados;
+    limparSelecao();
+    if (encontrados === PARES.length) {
+      setTimeout(mostrarVitoria, 1500);
+    }
+  } else {
+    travado = true;
+    const a = primeira, b = segunda;
+    [a, b].forEach(c => c.classList.add("wrong"));
+    timerDesvirar = setTimeout(() => {
+      [a, b].forEach(c => {
+        c.classList.remove("flipped", "wrong");
+        c.setAttribute("aria-label", "Carta virada para baixo");
+      });
+      limparSelecao();
+      travado = false;
+    }, TEMPO_DESVIRAR_MS);
+  }
+}
+
+function limparSelecao() {
+  primeira = null;
+  segunda = null;
+}
+
+function mostrarVitoria() {
+  resumoEl.textContent = `Você encontrou os ${PARES.length} pares em ${tentativas} tentativas.`;
+  reflexaoEl.textContent = REFLEXAO_FINAL;
+  overlayEl.classList.add("show");
+  document.getElementById("play-again").focus();
+}
+
+function iniciar() {
+  clearTimeout(timerDesvirar);
+  overlayEl.classList.remove("show");
+  boardEl.innerHTML = "";
+  primeira = segunda = null;
+  travado = false;
+  tentativas = 0;
+  encontrados = 0;
+  movesEl.textContent = "0";
+  pairsEl.textContent = "0";
+  totalEl.textContent = PARES.length;
+
+  montarBaralho().forEach((c, i) => boardEl.appendChild(criarCarta(c, i)));
+  window.scrollTo({ top: 0 }); // volta ao topo para o próximo jogador
+}
+
+document.getElementById("restart").addEventListener("click", iniciar);
+document.getElementById("play-again").addEventListener("click", iniciar);
+document.addEventListener("keydown", e => {
+  // Fechar o modal também reinicia, para o próximo jogador começar do zero
+  if (e.key === "Escape" && overlayEl.classList.contains("show")) iniciar();
+});
+
+iniciar();
+</script>
+</body>
+</html>
